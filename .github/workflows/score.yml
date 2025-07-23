@@ -1,0 +1,51 @@
+name: Daily market score (8 AM JST)
+
+on:
+  # 日本時間 08:00 (= UTC 23:00) に毎日実行
+  schedule:
+    - cron:  '0 23 * * *'
+  # 手動実行も出来るように
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      # ---- スコアを計算し、出力を Actions の出力値に渡す ----
+      - name: Run market_score.py
+        id: score
+        run: |
+          BODY="$(python market_score.py)"
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY"      >> $GITHUB_OUTPUT
+          echo "EOF"        >> $GITHUB_OUTPUT
+
+      # ---- Gmail で送信 ----
+      # ① Google アカウントで **アプリ パスワード** を取得
+      # ② リポジトリ Settings → Secrets → Actions に
+      #    EMAIL_USER, EMAIL_PASS を登録
+      - name: Send mail
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.EMAIL_USER }}
+          password: ${{ secrets.EMAIL_PASS }}
+          from:      ${{ secrets.EMAIL_USER }}
+          to:        tasaki1931@gmail.com
+          subject:   "今日の地合いスコア"
+          body:      ${{ steps.score.outputs.body }}
+          content_type: text/plain
